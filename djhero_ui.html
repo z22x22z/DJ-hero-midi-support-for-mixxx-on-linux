@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DJ Hero Bridge</title>
+<style>
+  /* ============ ROUGH LOOK: flat colours, hard edges, thick black borders, print grain ============
+     Built to be light on the browser: nothing animates all the time, the grain is a plain background
+     (not a layer on top), and the live panel only touches the page when a value really changed. */
+  :root {
+    --y: #f2d60a; --ydark: #8f7f00; --bg: #0e0e0d; --panel: #1b1b19; --line: #4a4a44;
+    --text: #ecebe4; --muted: #a3a299; --ok: #4cff6a; --bad: #ff4b3a;
+    --head: Impact, Haettenschweiler, "Arial Narrow Bold", "Liberation Sans Narrow", "DejaVu Sans Condensed", sans-serif;
+    --mono: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, "Courier New", monospace;
+    --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg) var(--grain); color: var(--text); font: 14px/1.4 var(--mono); }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 16px 16px 50px; }
+  .tape { height: 16px; border-top: 3px solid #000; border-bottom: 3px solid #000;
+          background: repeating-linear-gradient(-45deg, var(--y) 0 16px, #000 16px 32px); }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 14px 0 20px; }
+  #logo { height: 132px; width: auto; animation: slam .5s steps(5) both; }          /* plays once when the page opens */
+  @keyframes slam { from { transform: scale(1.7) rotate(-6deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  .title { flex: 1 1 260px; min-width: 240px; }
+  .title h1 { margin: 0 0 10px; }
+  .title h1 span { display: inline-block; background: var(--y); color: #000; padding: 3px 12px 1px; transform: rotate(-1.2deg);
+                   font: 900 32px/1.05 var(--head); text-transform: uppercase; letter-spacing: .03em; }
+  .title p { margin: 0; color: var(--muted); }
+  .title b { color: var(--y); }
+  .sticker { display: inline-block; background: #fff; color: #000; border: 3px solid #000; padding: 1px 8px; margin-left: 8px;
+             font: 900 13px/1.3 var(--head); text-transform: uppercase; letter-spacing: .05em; transform: rotate(3deg); vertical-align: middle; }
+  /* the sticker photo, taped on, a bit crooked */
+  .photo { position: relative; flex: none; margin: 8px 12px 8px 0; width: 198px; transform: rotate(2.5deg);
+           border: 5px solid #000; box-shadow: 7px 7px 0 var(--ydark); background: #000; }
+  .photo img { display: block; width: 100%; height: auto; }
+  .photo::before { content: ""; position: absolute; top: -16px; left: 50%; width: 86px; height: 26px; margin-left: -43px;
+                   background: rgba(242, 214, 10, .9); border: 2px dashed rgba(0, 0, 0, .4); transform: rotate(-5deg); }
+
+  /* ---------- the action bar: stays at the top while you scroll ---------- */
+  .bar { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
+         background: var(--bg) var(--grain); padding: 12px 4px 12px 0; margin: 0 0 16px;
+         border-top: 3px solid #000; border-bottom: 5px solid var(--y); }
+  .big { background: var(--y); color: #000; border: 3px solid #000; padding: 8px 15px 6px; font: 900 16px/1 var(--head); text-transform: uppercase;
+         letter-spacing: .06em; box-shadow: 5px 5px 0 var(--ydark); cursor: pointer; }
+  .big:active { transform: translate(4px, 4px); box-shadow: none; }
+  .big.ghost { background: #000; color: var(--text); border-color: var(--line); box-shadow: 5px 5px 0 #34332e; }
+  .big:hover { background: #fff; }
+  .state { font: 900 14px/1 var(--head); text-transform: uppercase; letter-spacing: .06em; padding: 6px 10px 4px; border: 3px solid var(--line); }
+  .state.clean { color: var(--ok); border-color: var(--ok); }
+  .state.dirty { background: var(--y); color: #000; border-color: #000; }
+  .msg { color: var(--muted); font-size: 12.5px; flex: 1 1 200px; }
+
+  /* ---------- status chips ---------- */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .chip { padding: 3px 9px; background: #000; border: 2px solid var(--line); color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  .chip.ok { color: var(--ok); border-color: var(--ok); }
+  .chip.bad { color: var(--bad); border-color: var(--bad); }
+
+  /* ---------- cards: thick black frame, hard shadow, torn yellow title tab ---------- */
+  .card { position: relative; background: var(--panel); border: 3px solid #000; outline: 2px solid var(--line); outline-offset: 2px;
+          box-shadow: 8px 8px 0 #000; padding: 14px 16px 10px; margin: 0 8px 26px 4px; }
+  #settings .card:nth-child(3n+2) { margin-left: 14px; }
+  #settings .card:nth-child(3n) { margin-left: 8px; }
+  .card h2 { margin: -14px -16px 12px; padding: 5px 40px 3px 14px; background: var(--y); color: #000;
+             font: 900 18px/1.15 var(--head); text-transform: uppercase; letter-spacing: .06em;
+             clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); }
+
+  /* ---------- live view ---------- */
+  .live { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 20px; align-items: start; }
+  .live h3 { margin: 0 0 7px; font: 900 13px/1 var(--head); color: var(--y); text-transform: uppercase; letter-spacing: .08em; }
+  .meter { position: relative; height: 22px; background: #000; border: 3px solid #000; outline: 2px solid var(--line);
+           background-image: repeating-linear-gradient(90deg, transparent 0 9px, #2c2c27 9px 10px); }
+  .meter .mid { position: absolute; left: 50%; top: -5px; bottom: -5px; width: 3px; margin-left: -1px; background: #fff; }
+  #plat-fill { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(90deg, var(--y) 0 8px, #000 8px 10px); }
+  #xf-dot { position: absolute; top: -4px; bottom: -4px; width: 16px; margin-left: -8px; background: var(--y); border: 3px solid #000; }
+  .num { color: var(--muted); font-size: 12px; margin-top: 7px; }
+  .dial { width: 72px; height: 72px; position: relative; background: var(--line);
+          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+  .dial::before { content: ""; position: absolute; inset: 5px; background: #000;
+          clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+  .dial::after { content: ""; position: absolute; left: 50%; top: 9px; width: 7px; height: 24px; margin-left: -3px; background: var(--y); }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btn { font-size: 11px; padding: 3px 8px; background: #000; border: 2px solid var(--line); color: #77766e; text-transform: uppercase; }
+  .btn.on { background: var(--y); color: #000; border-color: #000; font-weight: 700; }
+  .events { grid-column: 1 / -1; background: #000; border: 2px solid var(--line); padding: 7px 11px; min-height: 5.6em;
+            font-size: 12.5px; line-height: 1.5; color: var(--ok); }
+  .events b { color: var(--y); font-weight: 700; }
+
+  /* ---------- setting rows ---------- */
+  .row { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 1.5fr); gap: 6px 16px; padding: 10px 0; border-top: 2px dashed var(--line); align-items: center; }
+  .row:first-of-type { border-top: 0; }
+  .lab { font: 900 16px/1.1 var(--head); text-transform: uppercase; letter-spacing: .04em; }
+  .help { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .ctl { display: flex; align-items: center; gap: 10px; }
+
+  /* flat square slider */
+  input[type=range] { -webkit-appearance: none; appearance: none; flex: 1; min-width: 90px; height: 28px; background: transparent; margin: 0; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 10px; background: #000; border: 2px solid var(--line); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 26px; margin-top: -10px; background: var(--y); border: 3px solid #000; box-shadow: 3px 3px 0 var(--ydark); }
+  input[type=range]::-moz-range-track { height: 8px; background: #000; border: 2px solid var(--line); }
+  input[type=range]::-moz-range-thumb { width: 12px; height: 22px; background: var(--y); border: 3px solid #000; border-radius: 0; box-shadow: 3px 3px 0 var(--ydark); }
+  input.num-in { width: 78px; background: #000; color: var(--y); border: 2px solid var(--line); padding: 4px 6px; font: 700 14px var(--mono); }
+  .tiny { background: #000; border: 2px solid var(--line); color: var(--muted); padding: 2px 8px; font: inherit; cursor: pointer; }
+  .tiny:hover { background: var(--y); color: #000; border-color: #000; }
+  .tiny:active { transform: translate(2px, 2px); }
+
+  /* ON / OFF block instead of a smooth switch */
+  .switch { position: relative; width: 66px; height: 30px; flex: none; display: inline-block; }
+  .switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; background: #000; border: 3px solid var(--line); color: var(--muted);
+                 font: 900 14px/24px var(--head); letter-spacing: .08em; text-align: center; }
+  .switch span::before { content: "OFF"; }
+  .switch input:checked + span { background: var(--y); color: #000; border-color: #000; box-shadow: 3px 3px 0 var(--ydark); }
+  .switch input:checked + span::before { content: "ON"; }
+  .switch input:focus-visible + span, input:focus-visible, button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .mask { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+  .chk { cursor: pointer; user-select: none; background: #000; border: 2px solid var(--line); padding: 3px 9px; font-size: 13px; }
+  .chk input { accent-color: var(--y); margin-right: 4px; }
+  .chk:has(input:checked) { background: var(--y); color: #000; border-color: #000; font-weight: 700; }
+
+  /* ---------- cheat sheet ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 6px 8px; border-top: 2px dashed var(--line); vertical-align: top; }
+  td:first-child { color: var(--y); white-space: nowrap; width: 34%; font-weight: 700; }
+  summary { cursor: pointer; font: 900 17px/1.2 var(--head); color: var(--y); text-transform: uppercase; letter-spacing: .08em; padding: 2px 0 6px; }
+  footer { color: var(--muted); font-size: 12px; margin: 26px 0 14px; }
+
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } #logo { height: 96px; } .title h1 span { font-size: 24px; } .photo { width: 150px; } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="tape"></div>
+<div class="wrap">
+
+  <header>
+    <img id="logo" src="/logo.png" alt="DJ Hero">
+    <div class="title">
+      <h1><span>Turntable &rarr; Mixxx bridge</span></h1>
+      <p>Changes hit the decks instantly, but they are only kept if you press <b>SAVE</b>.<span class="sticker">Live</span></p>
+    </div>
+    <figure class="photo"><img src="/stickers.png" alt="" width="198" height="182"></figure>
+  </header>
+
+  <div class="bar">
+    <button class="big" id="save" title="Keep these settings (Ctrl+S)">Save</button>
+    <button class="big ghost" id="revert" title="Go back to what was last saved">Undo unsaved</button>
+    <button class="big ghost" id="reset" title="Load the factory defaults (press Save to keep them)">Reset to defaults</button>
+    <button class="big ghost" id="resend" title="Send every setting to Mixxx again">Send to Mixxx</button>
+    <span class="state clean" id="dirty">Saved</span>
+    <span class="msg" id="msg"></span>
+  </div>
+
+  <div class="chips">
+    <span class="chip" id="chip-dev">Turntable: …</span>
+    <span class="chip" id="chip-midi">MIDI: …</span>
+    <span class="chip" id="chip-push">Mixxx sync: …</span>
+  </div>
+
+  <section class="card">
+    <h2>Live controller</h2>
+    <div class="live">
+      <div>
+        <h3>Platter speed</h3>
+        <div class="meter"><div class="mid"></div><div id="plat-fill"></div></div>
+        <div class="num" id="plat-num">0</div>
+      </div>
+      <div>
+        <h3>Crossfader</h3>
+        <div class="meter"><div id="xf-dot" style="left:50%"></div></div>
+        <div class="num" id="xf-num">64</div>
+      </div>
+      <div>
+        <h3>Effects knob</h3>
+        <div class="dial" id="dial"></div>
+      </div>
+      <div style="grid-column: 1 / -1">
+        <h3>Buttons</h3>
+        <div class="btns" id="btns"></div>
+      </div>
+      <div class="events" id="events">Press a button on the turntable…</div>
+    </div>
+  </section>
+
+  <div id="settings"></div>
+
+  <details class="card">
+    <summary>What each button does</summary>
+    <table>
+      <tr><td>Circle / X / Square / Triangle</td><td>Hot cue 1 / 2 / 3 / 4 on the hot cue deck. Hold one for a moment and it turns <b>sticky</b>: it stays held after you let go, and pressing it again releases it.</td></tr>
+      <tr><td>PS (tap)</td><td>Switch which deck the hot cue buttons control (the active deck is not changed).</td></tr>
+      <tr><td>PS (hold) + X / Circle / Square</td><td>X: 4-beat loop on, press again to turn it off. Circle: loop in. Square: loop out. These act on the active deck.</td></tr>
+      <tr><td>Platter red / green / blue</td><td>Red: sync lock. Green: cue (hold to preview). Blue: headphone cue. All on the active deck.</td></tr>
+      <tr><td>Platter</td><td>Scratches the active deck.</td></tr>
+      <tr><td>Euphoria</td><td>Next effect in the list: Filter deck 1, Filter deck 2, Echo, Phaser, Reverb. The knob adjusts the selected one.</td></tr>
+      <tr><td>D-pad up / down</td><td>Tempo up / down (hold to repeat).</td></tr>
+      <tr><td>D-pad right</td><td>Switch the active deck, 1 and 2.</td></tr>
+      <tr><td>D-pad left</td><td>Effect on / off (a filter acts on its own deck, the others on the active deck).</td></tr>
+      <tr><td>Select / Start</td><td>Play / pause deck 1 / deck 2.</td></tr>
+    </table>
+  </details>
+
+  <div class="tape"></div>
+  <footer>This page only works on this computer. Saved settings live in <code>~/.config/djhero_settings.json</code>. Unsaved changes are lost when the bridge stops.</footer>
+</div>
+
+<noscript><p style="color:#fff;padding:20px">This page needs JavaScript.</p></noscript>
+
+<script>
+"use strict";
+const $ = (s, root = document) => root.querySelector(s);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let REG = [], VAL = {}, pending = {}, applyTimer = null, dirty = false, msgTimer = null;
+const setters = {};                       // key -> function that updates that row's controls
+
+/* ---- talk to the bridge ---- */
+async function api(path, body) {
+  const opt = body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json", "X-DJHero": "1" }, body: JSON.stringify(body) };
+  const r = await fetch(path, opt);
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+function msg(text, bad) {
+  const m = $("#msg");
+  m.textContent = text; m.style.color = bad ? "var(--bad)" : "var(--muted)";
+  clearTimeout(msgTimer);
+  if (text && !bad) msgTimer = setTimeout(() => { m.textContent = ""; }, 5000);
+}
+function setDirty(d) {
+  dirty = d;
+  const s = $("#dirty");
+  s.textContent = d ? "Unsaved changes" : "Saved";
+  s.className = "state " + (d ? "dirty" : "clean");
+  document.title = (d ? "* " : "") + "DJ Hero Bridge";
+}
+
+/* ---- a change made on the page: applied live after a very short pause, NOT saved to disk ---- */
+function queue(key, value) {
+  VAL[key] = value; pending[key] = value;
+  setDirty(true);
+  clearTimeout(applyTimer);
+  applyTimer = setTimeout(sendPending, 80);
+}
+async function sendPending() {
+  applyTimer = null;
+  const send = pending; pending = {};
+  if (!Object.keys(send).length) return;
+  try {
+    const r = await api("/api/settings", send);
+    VAL = r.values;
+    if (!Object.keys(pending).length) setDirty(r.dirty);
+  } catch (e) { msg("Could not reach the bridge. Is it still running?", true); }
+}
+
+/* ---- one row per setting ---- */
+function decimals(d) { const s = String(d.step || 1); return s.includes(".") ? s.split(".")[1].length : 0; }
+function fmt(v, d) { return Number(v).toFixed(d.kind === "int" ? 0 : decimals(d)); }
+
+function makeRow(d) {
+  const row = el("div", "row");
+  row.append(el("div", "info", `<div class="lab">${esc(d.label)}</div><div class="help">${esc(d.help)}</div>`));
+  const ctl = el("div", "ctl");
+
+  if (d.kind === "bool") {
+    const lab = el("label", "switch"), cb = el("input");
+    cb.type = "checkbox"; cb.setAttribute("aria-label", d.label);
+    cb.onchange = () => queue(d.key, cb.checked);
+    lab.append(cb, el("span"));
+    ctl.append(lab);
+    setters[d.key] = v => { cb.checked = !!v; };
+  } else if (d.kind === "mask") {
+    const box = el("div", "mask"), boxes = [];
+    d.options.forEach((name, i) => {
+      const l = el("label", "chk"), c = el("input");
+      c.type = "checkbox";
+      c.onchange = () => { let m = 0; boxes.forEach((b, j) => { if (b.checked) m |= 1 << j; }); queue(d.key, m); };
+      boxes.push(c); l.append(c, " " + name); box.append(l);
+    });
+    ctl.append(box);
+    setters[d.key] = v => boxes.forEach((b, j) => { b.checked = !!(v & (1 << j)); });
+  } else {
+    const rng = el("input"), num = el("input", "num-in");
+    for (const x of [rng, num]) { x.min = d.min; x.max = d.max; x.step = d.step; }
+    rng.type = "range"; num.type = "number"; rng.setAttribute("aria-label", d.label); num.setAttribute("aria-label", d.label + " value");
+    rng.oninput = () => { num.value = fmt(rng.value, d); queue(d.key, Number(rng.value)); };
+    num.onchange = () => {
+      let v = Math.max(d.min, Math.min(d.max, Number(num.value)));
+      if (isNaN(v)) v = d.default;
+      rng.value = v; num.value = fmt(v, d); queue(d.key, v);
+    };
+    ctl.append(rng, num);
+    setters[d.key] = v => { rng.value = v; num.value = fmt(v, d); };
+  }
+
+  const back = el("button", "tiny", "&#8634;");
+  back.title = "Back to the default (" + (d.kind === "bool" ? (d.default ? "on" : "off") : d.default) + ")";
+  back.setAttribute("aria-label", "Reset " + d.label);
+  back.onclick = () => { setters[d.key](d.default); queue(d.key, d.default); };
+  ctl.append(back);
+  row.append(ctl);
+  return row;
+}
+
+function buildSettings(data) {
+  REG = data.registry; VAL = data.values; setDirty(data.dirty);
+  const root = $("#settings"); root.innerHTML = "";
+  const groups = [];                               // keep the order the bridge lists them in
+  REG.forEach(d => { if (!groups.includes(d.group)) groups.push(d.group); });
+  groups.forEach(g => {
+    const card = el("section", "card");
+    card.append(el("h2", "", esc(g)));
+    REG.filter(d => d.group === g).forEach(d => card.append(makeRow(d)));
+    root.append(card);
+  });
+  refreshAll();
+}
+function refreshAll() { REG.forEach(d => setters[d.key](VAL[d.key])); }
+
+/* ---- the four buttons in the bar ---- */
+$("#save").onclick = async () => {
+  clearTimeout(applyTimer); await sendPending();         // make sure the last tweak has arrived first
+  try { const r = await api("/api/save", {}); VAL = r.values; setDirty(r.dirty); msg("Saved. These settings will be loaded next time."); }
+  catch (e) { msg("Could not save the settings.", true); }
+};
+$("#revert").onclick = async () => {
+  clearTimeout(applyTimer); pending = {};
+  try { const r = await api("/api/revert", {}); VAL = r.values; refreshAll(); setDirty(r.dirty); msg("Back to the last saved settings."); }
+  catch (e) { msg("Could not undo.", true); }
+};
+$("#reset").onclick = async () => {
+  if (!confirm("Load the factory defaults for every setting?\n(They are only kept if you press Save afterwards.)")) return;
+  clearTimeout(applyTimer); pending = {};
+  try { const r = await api("/api/reset", {}); VAL = r.values; refreshAll(); setDirty(r.dirty); msg("Defaults loaded. Press Save to keep them."); }
+  catch (e) { msg("Could not reset.", true); }
+};
+$("#resend").onclick = async () => {
+  try { await api("/api/resend", {}); msg("Sent to Mixxx."); } catch (e) { msg("Could not send.", true); }
+};
+document.addEventListener("keydown", e => {            // Ctrl+S / Cmd+S saves
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); $("#save").click(); }
+});
+window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });   // warn before losing changes
+
+/* ---- live view: only touches the page when something actually changed ---- */
+const E = { dev: $("#chip-dev"), midi: $("#chip-midi"), push: $("#chip-push"), fill: $("#plat-fill"), pnum: $("#plat-num"),
+            xf: $("#xf-dot"), xnum: $("#xf-num"), dial: $("#dial"), btns: $("#btns"), events: $("#events") };
+const btnEls = {}, last = {};
+function setText(node, key, v) { if (last[key] !== v) { last[key] = v; node.textContent = v; } }
+function setClass(node, key, v) { if (last[key] !== v) { last[key] = v; node.className = v; } }
+
+function render(s) {
+  if (!s.node) { setText(E.dev, "dev", "Turntable: not used (UI-only mode)"); setClass(E.dev, "devc", "chip"); }
+  else { setText(E.dev, "dev", s.connected ? "Turntable: " + s.node : "Turntable: no data from " + s.node); setClass(E.dev, "devc", "chip " + (s.connected ? "ok" : "bad")); }
+  setText(E.midi, "midi", s.midi_open ? "MIDI port 'DJ Hero': open" : "MIDI port: not open");
+  setClass(E.midi, "midic", "chip " + (s.midi_open ? "ok" : ""));
+  if (s.push_age === null) { setText(E.push, "push", "Mixxx sync: not sent yet"); setClass(E.push, "pushc", "chip"); }
+  else { setText(E.push, "push", "Settings sent to Mixxx (repeats every 3 s)"); setClass(E.push, "pushc", "chip ok"); }
+
+  const p = Math.max(-63, Math.min(63, s.platter));
+  if (last.p !== p) {
+    last.p = p;
+    const w = Math.abs(p) / 63 * 50;
+    E.fill.style.width = w + "%"; E.fill.style.left = (p >= 0 ? 50 : 50 - w) + "%";
+    E.pnum.textContent = (p > 0 ? "+" : "") + p + (p === 0 ? "  (still)" : p > 0 ? "  clockwise" : "  counter-clockwise");
+  }
+  if (last.x !== s.xfader) { last.x = s.xfader; E.xf.style.left = (s.xfader / 127 * 100) + "%"; E.xnum.textContent = s.xfader + " / 127"; }
+  if (last.k !== s.knob_turn) { last.k = s.knob_turn; E.dial.style.transform = "rotate(" + (s.knob_turn * 360 * s.knob_div / 1024) + "deg)"; }
+
+  if (!E.btns.children.length) s.buttons.forEach(n => { const b = el("span", "btn", esc(n)); btnEls[n] = b; E.btns.append(b); });
+  const pressedKey = s.pressed.join("|");
+  if (last.pressed !== pressedKey) { last.pressed = pressedKey; for (const n in btnEls) btnEls[n].classList.toggle("on", s.pressed.includes(n)); }
+  const evKey = JSON.stringify(s.events.slice(0, 5));
+  if (s.events.length && last.ev !== evKey) { last.ev = evKey; E.events.innerHTML = s.events.slice(0, 5).map(e => `<b>${esc(e[0])}</b> ${esc(e[1])}`).join("<br>"); }
+
+  // keep the "unsaved" indicator right even if something else changed the settings
+  if (!applyTimer && !Object.keys(pending).length && s.dirty !== dirty) setDirty(s.dirty);
+}
+
+async function poll() {
+  let wait = 150;
+  try { render(await api("/api/state")); }
+  catch (e) { setText(E.dev, "dev", "Bridge is not running"); setClass(E.dev, "devc", "chip bad"); wait = 1000; }
+  if (document.hidden) wait = Math.max(wait, 1000);   // do almost nothing in a background tab
+  setTimeout(poll, wait);
+}
+
+/* ---- start ---- */
+api("/api/settings").then(buildSettings).catch(() => { $("#settings").append(el("p", "", "Could not load the settings. Is the bridge running?")); });
+poll();
+</script>
+</body>
+</html>
